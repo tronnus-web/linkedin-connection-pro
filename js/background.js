@@ -578,7 +578,36 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
   else if (message.action === 'getAnalytics') {
     // Return analytics data
     if (sendResponse) {
-      sendResponse({analytics: AppState.analytics});
+      let filteredAnalytics = AppState.analytics;
+      
+      // If date range specified, filter the data
+      if (message.dateRange && message.dateRange !== 'all') {
+        const daysToInclude = parseInt(message.dateRange);
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - daysToInclude);
+        
+        // Create a filtered copy of the analytics
+        const filtered = {...AppState.analytics};
+        filtered.connectionsByDate = {};
+        
+        // Only include dates after the cutoff
+        Object.keys(AppState.analytics.connectionsByDate || {}).forEach(dateStr => {
+          const entryDate = new Date(dateStr);
+          if (entryDate >= cutoffDate) {
+            filtered.connectionsByDate[dateStr] = AppState.analytics.connectionsByDate[dateStr];
+          }
+        });
+        
+        // Recalculate totals
+        filtered.totalSent = 0;
+        Object.values(filtered.connectionsByDate).forEach(day => {
+          filtered.totalSent += (day.sent || 0);
+        });
+        
+        filteredAnalytics = filtered;
+      }
+      
+      sendResponse({analytics: filteredAnalytics});
     }
   }
   else if (message.action === 'saveSettings') {

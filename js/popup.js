@@ -99,6 +99,23 @@ document.addEventListener('DOMContentLoaded', function() {
     loadTemplate(selectedTemplate);
     appState.templateId = selectedTemplate;
   });
+
+  // Date Range Filter
+document.getElementById('date-range').addEventListener('change', function() {
+  const selectedRange = this.value;
+  console.log("Date range changed to:", selectedRange);
+  
+  // Request analytics data with the selected filter
+  chrome.runtime.sendMessage({ 
+    action: 'getAnalytics',
+    dateRange: selectedRange 
+  }, function(response) {
+    if (response && response.analytics) {
+      updateCharts(response.analytics, selectedRange);
+      updateAnalyticsMetrics(response.analytics);
+    }
+  });
+});
   
   // Action Buttons
   startButton.addEventListener('click', startSendingConnections);
@@ -690,6 +707,17 @@ document.addEventListener('DOMContentLoaded', function() {
     return days;
   }
 
+  // Get date labels for specified number of days
+function getDateLabels(days) {
+  const labels = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    labels.push(formatDate(date));
+  }
+  return labels;
+}
+
   // Format date as "MMM DD"
   function formatDate(date) {
     const options = { month: 'short', day: 'numeric' };
@@ -770,6 +798,16 @@ document.addEventListener('DOMContentLoaded', function() {
               ticks: {
                 font: {
                   size: 11
+                },
+                maxRotation: 90,
+                minRotation: 45,
+                callback: function(value, index, values) {
+                  // Show fewer labels if there are many
+                  const labelCount = values.length;
+                  if (labelCount > 14) {
+                    return index % 3 === 0 ? this.getLabelForValue(value) : '';
+                  }
+                  return this.getLabelForValue(value);
                 }
               }
             }
@@ -814,32 +852,47 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   // Update Charts with real data
-  function updateCharts(analytics) {
-    if (!analytics) return;
+function updateCharts(analytics, dateRange = '30') {
+  if (!analytics) return;
+  
+  // Update connections chart if it exists
+  if (window.connectionsChart) {
+    // Get the appropriate number of days based on selected range
+    let daysToShow = parseInt(dateRange);
     
-    // Update connections chart if it exists
-    if (window.connectionsChart) {
-      const last7Days = getLast7DaysLabels();
-      const sent = [];
-      
-      // Process data for each day
-      last7Days.forEach(day => {
-        // Convert from "Mar 7" format to ISO date format for lookup
-        const dateObj = new Date(day + ", " + new Date().getFullYear());
-        const isoDate = dateObj.toISOString().split('T')[0];
-        
-        const dayData = analytics.connectionsByDate[isoDate] || { sent: 0 };
-        sent.push(dayData.sent || 0);
-      });
-      
-      // Update chart data
-      window.connectionsChart.data.labels = last7Days;
-      window.connectionsChart.data.datasets[0].data = sent;
-      // Remove the accepted dataset
-      window.connectionsChart.data.datasets.splice(1, 1);
-      window.connectionsChart.update();
+    // Handle "all" case
+    if (dateRange === 'all' || isNaN(daysToShow)) {
+      // For "all" use all available data up to 365 days
+      daysToShow = 365;
     }
+    
+    // Generate date labels based on selected range
+    const dateLabels = getDateLabels(daysToShow);
+    const sent = [];
+    
+    // Process data for each day
+    dateLabels.forEach(day => {
+      // Convert from "Mar 7" format to ISO date format for lookup
+      const dateObj = new Date(day + ", " + new Date().getFullYear());
+      const isoDate = dateObj.toISOString().split('T')[0];
+      
+      const dayData = analytics.connectionsByDate[isoDate] || { sent: 0 };
+      sent.push(dayData.sent || 0);
+    });
+    
+    // Update chart data
+    window.connectionsChart.data.labels = dateLabels;
+    window.connectionsChart.data.datasets[0].data = sent;
+    
+    // If there was an accepted dataset, remove it
+    if (window.connectionsChart.data.datasets.length > 1) {
+      window.connectionsChart.data.datasets.splice(1, 1);
+    }
+    
+    // Update chart with new data
+    window.connectionsChart.update();
   }
+}
   
   // Update analytics metrics on the UI
   function updateAnalyticsMetrics(analytics) {
