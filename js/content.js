@@ -184,23 +184,42 @@ function extractProfileData() {
         }
       }
       
-      // Extract company - try multiple selector patterns
-      const companySelectors = [
-        '.pv-top-card-v2-section__company-name',
-        '.pv-top-card-v2-section__link',
-        '.pv-entity__company-summary-info h3',
-        '.profile-topcard__current-company',
-        '.pv-text-details__right-panel .text-body-small'
-      ];
-      
-      for (const selector of companySelectors) {
-        const element = document.querySelector(selector);
-        if (element) {
-          data.company = element.textContent.trim();
-          console.log("Found company:", data.company);
-          break;
-        }
+      // For company detection, add more approaches:
+// Method 1: Common selectors
+const companySelectors = [
+  '.pv-top-card-v2-section__company-name',
+  '.pv-entity__company-summary-info h3',
+  '.profile-topcard__current-company',
+  '.pv-text-details__right-panel .text-body-small'
+];
+
+// Try each selector
+for (const selector of companySelectors) {
+  const element = document.querySelector(selector);
+  if (element) {
+    data.company = element.textContent.trim();
+    console.log("Found company:", data.company);
+    break;
+  }
+}
+
+// Method 2: Look for text patterns if Method 1 fails
+if (!data.company) {
+  // Look for any text that contains "works at" or "working at"
+  const allElements = document.querySelectorAll('span, p, div');
+  for (const element of allElements) {
+    const text = element.textContent.toLowerCase();
+    if (text.includes('works at') || text.includes('working at')) {
+      // Extract company name that comes after "works at" or "working at"
+      const match = element.textContent.match(/(works at|working at)(.*?)($|\s*\(|\s*\•)/i);
+      if (match && match[2]) {
+        data.company = match[2].trim();
+        console.log("Found company from text:", data.company);
+        break;
       }
+    }
+  }
+}
       
       // Alternative approach for company: look for "works at" text
       if (!data.company) {
@@ -467,17 +486,21 @@ function findAndClickConnect(note, templateData = {}) {
   }
 }
 
-// Handle personalization of the connection note
+// Handle personalization of the connection note with improved Company tag support
 function personalizeNote(note, profileData) {
   if (!note || !profileData) return note;
   
-  // Replace tags with actual profile data
-  return note
-    .replace(/\[Name\]/g, profileData.name || '')
-    .replace(/\[Company\]/g, profileData.company || '')
-    .replace(/\[Location\]/g, profileData.location || '')
-    .replace(/\[Headline\]/g, profileData.headline || '')
-    .replace(/\[Industry\]/g, profileData.industry || '');
+  console.log("Personalizing note with data:", profileData);
+  
+  // Replace tags with actual profile data - using case insensitivity with 'gi' flag
+  let personalizedNote = note
+    .replace(/\[Name\]/gi, profileData.name || '')
+    .replace(/\[Company\]/gi, profileData.company || '');
+  
+  console.log("Original note:", note);
+  console.log("Personalized note:", personalizedNote);
+  
+  return personalizedNote;
 }
 
 // Safely click an element with error handling
